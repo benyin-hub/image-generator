@@ -117,3 +117,14 @@ export function buildAssetPrompt(assetType: AssetType, userPrompt: string): stri
 export function assetTypeLabel(assetType: AssetType): string {
   return ASSET_TYPES.find((a) => a.id === assetType)?.label ?? assetType;
 }
+
+const PROMPT_PLACEHOLDERS: Record<AssetType, string> = {
+  "app-icon": "A futuristic delivery drone flying above a modern city skyline at sunset.",
+  "feature-icon": "A upload box with an arrow pointing upward",
+  "key-visual":
+    "A set of shapes in balanced composition scattered around canvas, unify the colour, text in the center in pacific font style",
+};
+
+export function assetPromptPlaceholder(assetType: AssetType): string {
+  return PROMPT_PLACEHOLDERS[assetType];
+}

@@ -217,7 +217,7 @@ export default function Home() {
             onAddStyle={() => setModalOpen(true)}
           />
 
-          <PromptInput value={prompt} onChange={setPrompt} />
+          <PromptInput value={prompt} onChange={setPrompt} assetType={assetType} />
 
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
             <div className="w-full sm:w-40">
