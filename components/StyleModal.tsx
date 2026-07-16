@@ -392,7 +392,7 @@ export default function StyleModal({
                     value={stylePrompt}
                     onChange={(e) => setStylePrompt(e.target.value)}
                     rows={4}
-                    placeholder="Bright neon colours (#FF0088, #00FFFF), bold outlines, comic-inspired aesthetic..."
+                    placeholder="Bold outlines, comic-inspired aesthetic..."
                     className="w-full resize-none rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition placeholder:text-slate-400 focus:border-brand-400 focus:ring-1 focus:ring-brand-400"
                   />
                 )}
