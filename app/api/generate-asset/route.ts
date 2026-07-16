@@ -66,6 +66,7 @@ Do NOT copy:
       }
     }
 
+    console.log("=== Gemini prompt (generate-asset) ===\n" + prompt);
     const results = await generateImages(
       { prompt, referenceImages: referenceImages.length ? referenceImages : undefined },
       count

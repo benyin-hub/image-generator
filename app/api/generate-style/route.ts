@@ -102,6 +102,7 @@ export async function POST(req: NextRequest) {
         : undefined;
 
     const prompt = buildStylePrompt(body, colors);
+    console.log("=== Gemini prompt (generate-style) ===\n" + prompt);
     const result = await generateImage({ prompt, referenceImages });
 
     const colorNote =
