@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
 
     const referenceImages: InlineImage[] | undefined =
       body.mode === "reference"
-        ? body.referenceImages?.slice(0, 3).map((img) => ({
+        ? body.referenceImages?.slice(0, 2).map((img) => ({
             mimeType: img.mimeType,
             data: img.data,
           }))
