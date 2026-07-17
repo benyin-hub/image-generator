@@ -11,16 +11,8 @@ import GeneratedImageGrid from "@/components/GeneratedImageGrid";
 import HistoryPanel from "@/components/HistoryPanel";
 import { AssetType, GeneratedImage, HistoryItem, Style } from "@/lib/types";
 import { assetTypeLabel } from "@/lib/promptTemplates";
-import { DEFAULT_STYLE_SEEDS } from "@/lib/defaultStyles";
 import { dataUrlToParts } from "@/lib/dataUrl";
-import {
-  hasSeededDefaultStyles,
-  loadHistory,
-  loadStyles,
-  markDefaultStylesSeeded,
-  saveHistory,
-  saveStyles,
-} from "@/lib/storage";
+import { loadHistory, loadStyles, saveHistory, saveStyles } from "@/lib/storage";
 
 function pickDefaultStyleId(list: Style[]): string | null {
   if (list.length === 0) return null;
@@ -28,11 +20,18 @@ function pickDefaultStyleId(list: Style[]): string | null {
   return (minimal ?? list[0]).id;
 }
 
+function stylesForAssetType(all: Style[], type: AssetType): Style[] {
+  return all.filter((s) => !s.assetType || s.assetType === type);
+}
+
 export default function Home() {
   const [assetType, setAssetType] = useState<AssetType>("app-icon");
   const [styles, setStyles] = useState<Style[]>([]);
-  const [stylesLoading, setStylesLoading] = useState(false);
-  const [selectedStyleId, setSelectedStyleId] = useState<string | null>(null);
+  const [selectedStyleId, setSelectedStyleId] = useState<Record<AssetType, string | null>>({
+    "app-icon": null,
+    "feature-icon": null,
+    "key-visual": null,
+  });
   const [prompt, setPrompt] = useState("");
   const [count, setCount] = useState(1);
   const [generating, setGenerating] = useState(false);
@@ -41,70 +40,39 @@ export default function Home() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const seedAttempted = useRef(false);
+  const historyPanelRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const loadedStyles = loadStyles();
     setStyles(loadedStyles);
     setHistory(loadHistory());
-    setSelectedStyleId((prev) => prev ?? pickDefaultStyleId(loadedStyles));
+    setSelectedStyleId({
+      "app-icon": pickDefaultStyleId(stylesForAssetType(loadedStyles, "app-icon")),
+      "feature-icon": pickDefaultStyleId(stylesForAssetType(loadedStyles, "feature-icon")),
+      "key-visual": pickDefaultStyleId(stylesForAssetType(loadedStyles, "key-visual")),
+    });
   }, []);
 
   useEffect(() => {
-    if (seedAttempted.current) return;
-    if (styles.length > 0) return;
-    if (hasSeededDefaultStyles()) return;
-    seedAttempted.current = true;
-    seedDefaultStyles();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [styles]);
-
-  async function seedDefaultStyles() {
-    setStylesLoading(true);
-    try {
-      const created: Style[] = [];
-      for (const seed of DEFAULT_STYLE_SEEDS) {
-        try {
-          const res = await fetch("/api/generate-style", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mode: "prompt", name: seed.name, prompt: seed.prompt }),
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error);
-          created.push({
-            id: `style-${seed.name.toLowerCase()}-${Date.now()}`,
-            name: seed.name,
-            description: seed.prompt,
-            thumbnail: data.thumbnail,
-            createdAt: new Date().toISOString(),
-            source: "default",
-          });
-        } catch (err) {
-          console.error(`Failed to seed style ${seed.name}`, err);
-        }
+    if (activeHistoryId === null) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (historyPanelRef.current && !historyPanelRef.current.contains(e.target as Node)) {
+        setActiveHistoryId(null);
+        setImages([]);
       }
-      if (created.length > 0) {
-        setStyles((prev) => {
-          const next = [...prev, ...created];
-          saveStyles(next);
-          return next;
-        });
-        setSelectedStyleId((prev) => prev ?? pickDefaultStyleId(created));
-      }
-    } finally {
-      markDefaultStylesSeeded();
-      setStylesLoading(false);
     }
-  }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [activeHistoryId]);
 
   function handleSaveStyle(style: Style) {
+    const tagged: Style = { ...style, assetType };
     setStyles((prev) => {
-      const next = [...prev, style];
+      const next = [...prev, tagged];
       saveStyles(next);
       return next;
     });
-    setSelectedStyleId(style.id);
+    setSelectedStyleId((prev) => ({ ...prev, [assetType]: tagged.id }));
     setModalOpen(false);
   }
 
@@ -112,9 +80,10 @@ export default function Home() {
     const next = styles.filter((s) => s.id !== id);
     setStyles(next);
     saveStyles(next);
-    if (selectedStyleId === id) {
-      setSelectedStyleId(pickDefaultStyleId(next));
-    }
+    setSelectedStyleId((prev) => {
+      if (prev[assetType] !== id) return prev;
+      return { ...prev, [assetType]: pickDefaultStyleId(stylesForAssetType(next, assetType)) };
+    });
   }
 
   async function handleGenerate() {
@@ -127,7 +96,7 @@ export default function Home() {
     setActiveHistoryId(null);
     setImages([]);
 
-    const selectedStyle = styles.find((s) => s.id === selectedStyleId) ?? null;
+    const selectedStyle = styles.find((s) => s.id === selectedStyleId[assetType]) ?? null;
 
     try {
       const stylePayload = selectedStyle
@@ -192,7 +161,17 @@ export default function Home() {
     setImages(item.images);
     setPrompt(item.prompt);
     setAssetType(item.assetType);
-    setSelectedStyleId(item.styleId);
+    setSelectedStyleId((prev) => ({ ...prev, [item.assetType]: item.styleId }));
+  }
+
+  function handleDeleteHistory(id: string) {
+    const next = history.filter((h) => h.id !== id);
+    setHistory(next);
+    saveHistory(next);
+    if (activeHistoryId === id) {
+      setActiveHistoryId(null);
+      setImages([]);
+    }
   }
 
   return (
@@ -209,10 +188,10 @@ export default function Home() {
           <AssetTypeSelector value={assetType} onChange={setAssetType} />
 
           <StyleLibrary
-            styles={styles}
-            selectedStyleId={selectedStyleId}
-            loading={stylesLoading}
-            onSelect={setSelectedStyleId}
+            styles={stylesForAssetType(styles, assetType)}
+            selectedStyleId={selectedStyleId[assetType]}
+            assetTypeLabel={assetTypeLabel(assetType)}
+            onSelect={(id) => setSelectedStyleId((prev) => ({ ...prev, [assetType]: id }))}
             onDelete={handleDeleteStyle}
             onAddStyle={() => setModalOpen(true)}
           />
@@ -245,8 +224,13 @@ export default function Home() {
           </div>
         </div>
 
-        <aside>
-          <HistoryPanel history={history} activeId={activeHistoryId} onSelect={handleSelectHistory} />
+        <aside ref={historyPanelRef}>
+          <HistoryPanel
+            history={history}
+            activeId={activeHistoryId}
+            onSelect={handleSelectHistory}
+            onDelete={handleDeleteHistory}
+          />
         </aside>
       </div>
 

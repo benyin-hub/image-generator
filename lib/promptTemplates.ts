@@ -19,10 +19,11 @@ export const ASSET_TYPES: AssetTypeOption[] = [
 ];
 
 const TEMPLATES: Record<AssetType, string> = {
-  "app-icon": `App icon, rounded square format,
-subject centred and filling the frame,
-cohesive background treatment,
-recognisable as a launcher tile.
+  "app-icon": `App icon, 
+  rounded square format,
+  subject centred and filling the frame,
+  cohesive background treatment,
+  recognisable as a launcher tile.
 
 {{USER_PROMPT}}
 
@@ -30,7 +31,6 @@ Flat vector illustration style,
 solid fills,
 bold simple shapes,
 limited colour palette,
-no gradients,
 no texture,
 crisp geometric edges,
 high contrast.
@@ -51,22 +51,17 @@ Negative Prompt:
 - no multiple subjects
 - no drop shadows`,
 
-  "feature-icon": `UI feature icon.
+  "feature-icon": `UI feature icon, 
+  Single centred glyph, 
+  Generous padding, 
+  No background scene.
 
-Single centred glyph.
-
-Generous padding.
-
-No background scene.
 
 {{USER_PROMPT}}
 
 Monoline outline icon.
-
 Uniform stroke weight.
-
 Rounded stroke caps.
-
 No fill.
 
 Quality:

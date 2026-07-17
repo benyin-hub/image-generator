@@ -35,6 +35,7 @@ This is a single-page Next.js (App Router) app. Almost all state lives in `app/p
 - Two route handlers act as thin proxies to Gemini:
   - `app/api/generate-style/route.ts` — generates a style thumbnail from one of three modes: `upload` (a single uploaded image, echoed back as-is), `prompt` (a text description), or `reference` (up to 2 uploaded reference images plus instructions for how Gemini should use them, e.g. "combine these into one style"). Accepts an optional `colors` array (up to 3 hex codes) for all three modes, which gets appended to the prompt as a hard colour constraint (see `colorConstraintBlock()`).
   - `app/api/generate-asset/route.ts` — generates 1-3 asset PNGs from an asset type + user prompt + optional style.
+  - `app/api/fetch-image/route.ts` — proxies an arbitrary image URL server-side (avoids browser CORS restrictions) and returns it as base64 + a data URL. Used by the Add Style modal's "paste an image link" option. Rejects non-http(s) URLs, non-`image/*` responses, and payloads over 10MB.
 
 ### Prompt templates (brand-compliance layer)
 
@@ -46,19 +47,16 @@ The same file also exports `assetPromptPlaceholder(assetType)`, which drives the
 
 A "style" is just a previously generated reference image plus a text description. When generating an asset with a style selected, `app/api/generate-asset/route.ts` appends the style's description to the asset prompt **and** passes the style's thumbnail image as an inline reference image, so Gemini visually matches palette/linework/rendering technique rather than relying on text alone.
 
-- `lib/defaultStyles.ts` defines seed prompts for two default styles ("Minimal", "3D").
-- `app/page.tsx`'s `seedDefaultStyles()` lazily generates these on first load if the user has no styles yet, gated by a `localStorage` flag (`hasSeededDefaultStyles`/`markDefaultStylesSeeded` in `lib/storage.ts`) so it only ever attempts once, even if generation fails (e.g. missing API key).
-- Style selection always defaults to "Minimal" (or the first available style) whenever nothing is explicitly selected — see `pickDefaultStyleId()` in `app/page.tsx`. There is intentionally **no** "no style" option in the UI; deleting the selected style falls back to another default rather than clearing selection.
+- There are no seeded/default styles — the library starts empty and only ever contains styles the user explicitly creates via the Add Style modal. (An earlier version auto-seeded "Minimal"/"3D" styles on first load via `lib/defaultStyles.ts`; that mechanism was removed.)
+- **The style library is scoped per asset type.** Every `Style` carries an `assetType` field (set from whichever asset-type tab is active when it's saved, in `app/page.tsx#handleSaveStyle`), and `StyleLibrary` only ever renders `stylesForAssetType(styles, assetType)` — the App Icon, Feature Icon, and Key Visual tabs each see only their own styles, never each other's. Styles saved before this field existed have `assetType: undefined` and are treated as visible under all three tabs (see the filter in `stylesForAssetType()`), so nothing gets orphaned by the migration.
+- Because the library is per-asset-type, "selected style" is too: `selectedStyleId` in `app/page.tsx` is a `Record<AssetType, string | null>`, not a single value — switching the asset-type tab switches which style is considered selected without losing the other tabs' selections.
+- Style selection within a given asset type defaults to a style literally named "Minimal" if one exists (case-insensitive match), otherwise the first available style for that asset type, whenever nothing is explicitly selected — see `pickDefaultStyleId()` in `app/page.tsx`. There is intentionally **no** "no style" option in the UI; deleting the selected style falls back to another one (within the same asset type) rather than clearing selection.
 
 #### Add Style modal (`components/StyleModal.tsx`)
 
-The "Add Style" modal has a style name field, an optional colour palette picker (up to 3 hex colours, via `components/ColorWheel.tsx` + `lib/color.ts#hslToHex`), and a "Style Image Generation" section with three tabs mapping 1:1 to the API's three modes:
+The "Add Style" modal has just two fields: a style name text input, and a style image supplied either by uploading a file or by pasting an image URL (fetched server-side via `/api/fetch-image` to sidestep CORS, then treated identically to an uploaded file). There is no separate generate/preview step — clicking **Add** builds the `Style` object client-side (no Gemini call; `/api/generate-style`'s `upload` mode never called Gemini either, it just echoed the image back) and saves it straight to the library, closing the modal.
 
-- **Upload Image** — a single image upload box (`mode: "upload"`).
-- **Prompt** — a text description textarea (`mode: "prompt"`).
-- **Reference Image** — up to 2 reference image uploads plus a multiline instructions textbox (`mode: "reference"`).
-
-After a successful generation, the preview screen offers **Save to Library** (calls `onSave`), **Restart** (resets every field in the modal back to empty, including switching back to the Upload Image tab), and **Download** (saves the generated PNG locally via a temporary `<a download>` link).
+Note: `app/api/generate-style/route.ts` still implements `prompt` and `reference` modes plus an optional `colors` palette constraint — that's unused surface area now that the modal only produces `source: "upload"` styles, kept in case the UI grows back into it. There is no UI for it currently.
 
 ### Data flow quirk
 

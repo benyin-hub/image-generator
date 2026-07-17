@@ -7,14 +7,14 @@ import StyleCard from "./StyleCard";
 export default function StyleLibrary({
   styles,
   selectedStyleId,
-  loading,
+  assetTypeLabel,
   onSelect,
   onDelete,
   onAddStyle,
 }: {
   styles: Style[];
   selectedStyleId: string | null;
-  loading: boolean;
+  assetTypeLabel: string;
   onSelect: (id: string | null) => void;
   onDelete: (id: string) => void;
   onAddStyle: () => void;
@@ -24,7 +24,10 @@ export default function StyleLibrary({
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-slate-700">Style Library</h2>
+        <h2 className="text-sm font-semibold text-slate-700">
+          Style Library
+          <span className="ml-1.5 text-xs font-normal text-slate-400">· {assetTypeLabel}</span>
+        </h2>
         <div className="flex items-center gap-2">
           {styles.length > 0 && (
             <button
@@ -50,7 +53,7 @@ export default function StyleLibrary({
 
       {styles.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
-          No style exist in the library, please proceed to create one.
+          No {assetTypeLabel} styles yet, please proceed to create one.
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

@@ -17,7 +17,11 @@ export interface Style {
   description: string;
   thumbnail: string; // data URL
   createdAt: string;
-  source: "upload" | "prompt" | "reference" | "default";
+  source: "upload" | "prompt" | "reference";
+  // Which asset type this style belongs to. Absent on styles saved before
+  // per-asset-type libraries existed — those are treated as visible under
+  // every asset type rather than orphaned.
+  assetType?: AssetType;
 }
 
 export interface GeneratedImage {
