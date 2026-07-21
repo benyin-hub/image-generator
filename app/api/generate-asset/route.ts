@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
 
 Preserve:
 - line work
-- stroke thickness
+- stroke thickness — match the reference exactly, including having NO outline/stroke at all if the reference has none; do not add an outline that isn't present in the reference image
 - corner radius
 - colour palette
 - visual weight

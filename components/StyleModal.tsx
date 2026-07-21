@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { AssetType, Style } from "@/lib/types";
+import { ensureImageResolution } from "@/lib/imageQuality";
 
 interface UploadedImage {
   dataUrl: string;
@@ -13,6 +14,7 @@ interface StyleAnalysis {
   characteristics: string[];
   colors: string[];
   description: string;
+  quality: { blurry: boolean; heavilyCropped: boolean; reason: string };
 }
 
 function fileToUploadedImage(file: File): Promise<UploadedImage> {
@@ -43,6 +45,12 @@ function ensureSupportedImage(image: UploadedImage): UploadedImage {
   }
   return image;
 }
+
+// Thrown when the vision-model quality check (blur/cropping — see
+// analyzeStyleImage in lib/gemini.ts) rejects an image, so the catch block in
+// analyzeImage() can distinguish "reject this image" from a generic
+// analysis failure (which is non-blocking).
+class ImageQualityError extends Error {}
 
 export default function StyleModal({
   onClose,
@@ -78,8 +86,21 @@ export default function StyleModal({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to analyse image.");
+      if (data.quality?.blurry || data.quality?.heavilyCropped) {
+        throw new ImageQualityError(data.quality.reason || "This image failed a quality check.");
+      }
       setAnalysis(data);
     } catch (err) {
+      if (err instanceof ImageQualityError) {
+        // Blocking: unlike a failed/unavailable analysis, a detected quality
+        // problem (blur, heavy cropping) means this image shouldn't be used
+        // as a style reference at all — reject it outright.
+        setUploadedImage(null);
+        setAnalysis(null);
+        setAnalysisError(null);
+        setUploadError(err.message);
+        return;
+      }
       // Non-blocking: saving the style still works without detected
       // characteristics, but the failure should still be visible/retryable
       // rather than silently disappearing.
@@ -95,6 +116,7 @@ export default function StyleModal({
     setUploadError(null);
     try {
       const converted = ensureSupportedImage(await fileToUploadedImage(files[0]));
+      await ensureImageResolution(converted.dataUrl);
       setUploadedImage(converted);
       analyzeImage(converted);
     } catch (err) {
@@ -121,6 +143,7 @@ export default function StyleModal({
         base64: data.data,
         mimeType: data.mimeType,
       });
+      await ensureImageResolution(converted.dataUrl);
       setUploadedImage(converted);
       setImageUrl("");
       analyzeImage(converted);

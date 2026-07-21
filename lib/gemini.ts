@@ -154,23 +154,38 @@ export interface StyleAnalysis {
   characteristics: string[];
   colors: string[]; // hex codes
   description: string;
+  quality: StyleImageQuality;
+}
+
+export interface StyleImageQuality {
+  blurry: boolean;
+  heavilyCropped: boolean;
+  reason: string; // one-sentence explanation, populated when either flag is true
 }
 
 /**
  * Uses a vision-capable text model to inspect an uploaded style reference
  * image and extract: a short list of visual characteristics, a dominant
- * colour palette, and a style-only prose description (no subject, no
- * asset-type composition — those are supplied separately at generation time).
+ * colour palette, a style-only prose description (no subject, no
+ * asset-type composition — those are supplied separately at generation time),
+ * and a quality check. Blur and cropping can't be checked deterministically
+ * the way resolution/corruption can (see lib/imageQuality.ts), so they're
+ * judged here instead, by the same vision call.
  */
 export async function analyzeStyleImage(image: InlineImage): Promise<StyleAnalysis> {
   const ai = getClient();
 
-  const instructions = `You analyse reference images to describe their visual/rendering style for an AI image generator's style library. Look only at HOW this image is rendered — not what its subject is.
+  const instructions = `You analyse reference images for an AI image generator's style library: both their visual/rendering style and basic image quality.
 
-Respond with:
+Style — look only at HOW this image is rendered, not what its subject is:
 - characteristics: 3 to 5 short phrases (2-4 words each) naming visual traits, e.g. "Rounded geometry", "Minimal line work", "Soft gradients", "Friendly tone".
 - colors: up to 3 dominant hex colour codes from the image, formatted like "#0055FF".
-- description: one concise paragraph (2-3 sentences) describing ONLY the rendering style — line work, shapes, edges, shading, and mood. Do not mention any subject, object, or scene content, and do not mention asset type or composition (centring, framing, etc.) — only the visual/rendering characteristics.`;
+- description: one concise paragraph (2-3 sentences) describing ONLY the rendering style — line work, shapes, edges, shading, and mood. Do not mention any subject, object, or scene content, and do not mention asset type or composition (centring, framing, etc.) — only the visual/rendering characteristics.
+
+Quality — judge the image itself:
+- quality.blurry: true if the image is noticeably out of focus, blurry, or too low quality/pixelated for fine details to be discernible.
+- quality.heavilyCropped: true if the main subject is heavily cropped or cut off by the frame edges, such that a significant part of it is missing.
+- quality.reason: if either quality flag above is true, one short sentence explaining which and why; otherwise an empty string.`;
 
   const response = await ai.models.generateContent({
     model: TEXT_MODEL,
@@ -191,8 +206,17 @@ Respond with:
           characteristics: { type: Type.ARRAY, items: { type: Type.STRING } },
           colors: { type: Type.ARRAY, items: { type: Type.STRING } },
           description: { type: Type.STRING },
+          quality: {
+            type: Type.OBJECT,
+            properties: {
+              blurry: { type: Type.BOOLEAN },
+              heavilyCropped: { type: Type.BOOLEAN },
+              reason: { type: Type.STRING },
+            },
+            required: ["blurry", "heavilyCropped", "reason"],
+          },
         },
-        required: ["characteristics", "colors", "description"],
+        required: ["characteristics", "colors", "description", "quality"],
       },
     },
   });
@@ -207,5 +231,10 @@ Respond with:
     characteristics: (parsed.characteristics ?? []).slice(0, 5),
     colors: (parsed.colors ?? []).filter((c) => HEX_COLOR_RE.test(c)).slice(0, 3),
     description: parsed.description,
+    quality: {
+      blurry: Boolean(parsed.quality?.blurry),
+      heavilyCropped: Boolean(parsed.quality?.heavilyCropped),
+      reason: parsed.quality?.reason ?? "",
+    },
   };
 }
