@@ -32,36 +32,16 @@ function fileToUploadedImage(file: File): Promise<UploadedImage> {
 // Gemini's vision input only accepts raster formats — SVGs (and anything
 // else outside this list) get rejected with "Unsupported MIME type" both
 // during style analysis and later, when the style's thumbnail is re-sent
-// as a reference image during asset generation. Rasterizing to PNG here,
-// once, up front, fixes both call sites at the source.
+// as a reference image during asset generation. Reject anything else here,
+// up front, rather than letting it fail later at one of those call sites.
 const GEMINI_SUPPORTED_MIME_TYPES = ["image/png", "image/jpeg", "image/webp", "image/heic", "image/heif"];
-const UNSUPPORTED_FORMAT_MESSAGE = "Only these image formats are supported: PNG, JPEG, WebP, HEIC.";
+const UNSUPPORTED_FORMAT_MESSAGE = "Only accept (PNG, JPEG, WebP, HEIC).";
 
-function rasterizeToPng(dataUrl: string): Promise<UploadedImage> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const size = 1024;
-      const canvas = document.createElement("canvas");
-      canvas.width = size;
-      canvas.height = size;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        reject(new Error(UNSUPPORTED_FORMAT_MESSAGE));
-        return;
-      }
-      ctx.drawImage(img, 0, 0, size, size);
-      const pngDataUrl = canvas.toDataURL("image/png");
-      resolve({ dataUrl: pngDataUrl, base64: pngDataUrl.split(",")[1], mimeType: "image/png" });
-    };
-    img.onerror = () => reject(new Error(UNSUPPORTED_FORMAT_MESSAGE));
-    img.src = dataUrl;
-  });
-}
-
-function ensureSupportedImage(image: UploadedImage): Promise<UploadedImage> {
-  if (GEMINI_SUPPORTED_MIME_TYPES.includes(image.mimeType)) return Promise.resolve(image);
-  return rasterizeToPng(image.dataUrl);
+function ensureSupportedImage(image: UploadedImage): UploadedImage {
+  if (!GEMINI_SUPPORTED_MIME_TYPES.includes(image.mimeType)) {
+    throw new Error(UNSUPPORTED_FORMAT_MESSAGE);
+  }
+  return image;
 }
 
 export default function StyleModal({
@@ -114,7 +94,7 @@ export default function StyleModal({
     if (!files || files.length === 0) return;
     setUploadError(null);
     try {
-      const converted = await ensureSupportedImage(await fileToUploadedImage(files[0]));
+      const converted = ensureSupportedImage(await fileToUploadedImage(files[0]));
       setUploadedImage(converted);
       analyzeImage(converted);
     } catch (err) {
@@ -136,7 +116,7 @@ export default function StyleModal({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to fetch image.");
-      const converted = await ensureSupportedImage({
+      const converted = ensureSupportedImage({
         dataUrl: data.dataUrl,
         base64: data.data,
         mimeType: data.mimeType,
