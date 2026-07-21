@@ -10,6 +10,7 @@ export default function StyleLibrary({
   assetTypeLabel,
   onSelect,
   onDelete,
+  onRename,
   onAddStyle,
 }: {
   styles: Style[];
@@ -17,6 +18,7 @@ export default function StyleLibrary({
   assetTypeLabel: string;
   onSelect: (id: string | null) => void;
   onDelete: (id: string) => void;
+  onRename: (id: string, name: string) => void;
   onAddStyle: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -65,6 +67,7 @@ export default function StyleLibrary({
               editing={editing}
               onSelect={() => onSelect(style.id)}
               onDelete={() => onDelete(style.id)}
+              onRename={(name) => onRename(style.id, name)}
             />
           ))}
         </div>

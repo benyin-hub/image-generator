@@ -41,6 +41,7 @@ export default function Home() {
   const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const historyPanelRef = useRef<HTMLElement>(null);
+  const generatedImagesRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const loadedStyles = loadStyles();
@@ -56,7 +57,10 @@ export default function Home() {
   useEffect(() => {
     if (activeHistoryId === null) return;
     function handleClickOutside(e: MouseEvent) {
-      if (historyPanelRef.current && !historyPanelRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const insideHistoryPanel = historyPanelRef.current?.contains(target) ?? false;
+      const insideGeneratedImages = generatedImagesRef.current?.contains(target) ?? false;
+      if (!insideHistoryPanel && !insideGeneratedImages) {
         setActiveHistoryId(null);
         setImages([]);
       }
@@ -74,6 +78,14 @@ export default function Home() {
     });
     setSelectedStyleId((prev) => ({ ...prev, [assetType]: tagged.id }));
     setModalOpen(false);
+  }
+
+  function handleRenameStyle(id: string, name: string) {
+    setStyles((prev) => {
+      const next = prev.map((s) => (s.id === id ? { ...s, name } : s));
+      saveStyles(next);
+      return next;
+    });
   }
 
   function handleDeleteStyle(id: string) {
@@ -107,6 +119,8 @@ export default function Home() {
               description: selectedStyle.description,
               thumbnailBase64: base64,
               thumbnailMimeType: mimeType,
+              colors: selectedStyle.colors,
+              characteristics: selectedStyle.characteristics,
             };
           })()
         : null;
@@ -193,10 +207,11 @@ export default function Home() {
             assetTypeLabel={assetTypeLabel(assetType)}
             onSelect={(id) => setSelectedStyleId((prev) => ({ ...prev, [assetType]: id }))}
             onDelete={handleDeleteStyle}
+            onRename={handleRenameStyle}
             onAddStyle={() => setModalOpen(true)}
           />
 
-          <PromptInput value={prompt} onChange={setPrompt} assetType={assetType} />
+          <PromptInput value={prompt} onChange={setPrompt} />
 
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
             <div className="w-full sm:w-40">
@@ -211,7 +226,7 @@ export default function Home() {
             <p className="-mt-4 text-sm text-red-600">{generateError}</p>
           )}
 
-          <div>
+          <div ref={generatedImagesRef}>
             <h2 className="mb-3 text-sm font-semibold text-slate-700">
               Generated Images
               {activeHistoryId && (
@@ -235,7 +250,7 @@ export default function Home() {
       </div>
 
       {modalOpen && (
-        <StyleModal onClose={() => setModalOpen(false)} onSave={handleSaveStyle} />
+        <StyleModal onClose={() => setModalOpen(false)} onSave={handleSaveStyle} assetType={assetType} />
       )}
     </main>
   );

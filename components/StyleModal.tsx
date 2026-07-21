@@ -1,12 +1,18 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Style } from "@/lib/types";
+import { AssetType, Style } from "@/lib/types";
 
 interface UploadedImage {
   dataUrl: string;
   base64: string;
   mimeType: string;
+}
+
+interface StyleAnalysis {
+  characteristics: string[];
+  colors: string[];
+  description: string;
 }
 
 function fileToUploadedImage(file: File): Promise<UploadedImage> {
@@ -26,24 +32,48 @@ function fileToUploadedImage(file: File): Promise<UploadedImage> {
 export default function StyleModal({
   onClose,
   onSave,
+  assetType,
 }: {
   onClose: () => void;
   onSave: (style: Style) => void;
+  assetType: AssetType;
 }) {
   const [name, setName] = useState("");
   const [uploadedImage, setUploadedImage] = useState<UploadedImage | null>(null);
   const [imageUrl, setImageUrl] = useState("");
   const [fetchingUrl, setFetchingUrl] = useState(false);
   const [urlError, setUrlError] = useState<string | null>(null);
-  const [showImageTip, setShowImageTip] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<StyleAnalysis | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
   const canAdd = name.trim().length > 0 && uploadedImage !== null;
+
+  async function analyzeImage(image: UploadedImage) {
+    setAnalysis(null);
+    setAnalyzing(true);
+    try {
+      const res = await fetch("/api/analyze-style", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: image.base64, imageMimeType: image.mimeType }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to analyse image.");
+      setAnalysis(data);
+    } catch {
+      // Analysis is a non-blocking enhancement — saving the style still works without it.
+      setAnalysis(null);
+    } finally {
+      setAnalyzing(false);
+    }
+  }
 
   async function handleUploadImageSelected(files: FileList | null) {
     if (!files || files.length === 0) return;
     const converted = await fileToUploadedImage(files[0]);
     setUploadedImage(converted);
+    analyzeImage(converted);
   }
 
   async function handleUseImageUrl() {
@@ -59,8 +89,10 @@ export default function StyleModal({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to fetch image.");
-      setUploadedImage({ dataUrl: data.dataUrl, base64: data.data, mimeType: data.mimeType });
+      const converted = { dataUrl: data.dataUrl, base64: data.data, mimeType: data.mimeType };
+      setUploadedImage(converted);
       setImageUrl("");
+      analyzeImage(converted);
     } catch (err) {
       setUrlError(err instanceof Error ? err.message : "Failed to fetch image.");
     } finally {
@@ -68,15 +100,23 @@ export default function StyleModal({
     }
   }
 
+  function handleRemoveImage() {
+    setUploadedImage(null);
+    setAnalysis(null);
+    setAnalyzing(false);
+  }
+
   function handleAdd() {
     if (!canAdd || !uploadedImage) return;
     const style: Style = {
       id: `style-${Date.now()}`,
       name: name.trim(),
-      description: "Custom uploaded style image.",
+      description: analysis?.description ?? "Custom uploaded style image.",
       thumbnail: uploadedImage.dataUrl,
       createdAt: new Date().toISOString(),
       source: "upload",
+      colors: analysis?.colors,
+      characteristics: analysis?.characteristics,
     };
     onSave(style);
   }
@@ -115,65 +155,93 @@ export default function StyleModal({
 
             <div>
               <div className="mb-1.5 flex items-center gap-1.5">
-                <label className="block text-sm font-semibold text-slate-800">Style Image</label>
-                <div
-                  className="relative"
-                  onMouseEnter={() => setShowImageTip(true)}
-                  onMouseLeave={() => setShowImageTip(false)}
-                >
-                  <button
-                    type="button"
-                    onFocus={() => setShowImageTip(true)}
-                    onBlur={() => setShowImageTip(false)}
-                    aria-label="Style image tips"
-                    className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-[10px] font-semibold text-slate-600 hover:bg-slate-300"
-                  >
-                    i
-                  </button>
-                  {showImageTip && (
-                    <div className="absolute left-0 top-full z-10 mt-2 w-64 rounded-xl border border-slate-200 bg-white p-3 text-xs leading-relaxed text-slate-600 shadow-popover">
-                      To produce the closest style match, the image needs to be good quality with
-                      no blur.
-                    </div>
-                  )}
-                </div>
+                <label className="block text-sm font-semibold text-slate-800">Reference Image</label>
               </div>
 
               {uploadedImage ? (
-                <div className="relative mx-auto h-40 w-40 overflow-hidden rounded-2xl border border-slate-200">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={uploadedImage.dataUrl}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setUploadedImage(null)}
-                    aria-label="Remove image"
-                    className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-900/70 text-white"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5">
-                      <path
-                        d="M6 6l12 12M18 6L6 18"
-                        stroke="currentColor"
-                        strokeWidth="2.2"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  </button>
-                </div>
+                <>
+                  <div className="relative mx-auto h-40 w-40 overflow-hidden rounded-2xl border border-slate-200">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={uploadedImage.dataUrl}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleRemoveImage}
+                      aria-label="Remove image"
+                      className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-900/70 text-white"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5">
+                        <path
+                          d="M6 6l12 12M18 6L6 18"
+                          stroke="currentColor"
+                          strokeWidth="2.2"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    </button>
+                    {analyzing && (
+                      <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5 bg-slate-900/70 py-1.5 text-xs font-medium text-white">
+                        <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                        Analysing...
+                      </div>
+                    )}
+                  </div>
+
+                  {analysis && !analyzing && (
+                    <div className="mx-auto mt-3 w-full max-w-xs rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs leading-relaxed text-slate-600">
+                      <p className="font-semibold text-slate-800">Visual characteristics:</p>
+                      <ul className="mt-1 space-y-0.5">
+                        {analysis.characteristics.map((c) => (
+                          <li key={c}>☑ {c}</li>
+                        ))}
+                      </ul>
+                      {analysis.colors.length > 0 && (
+                        <>
+                          <p className="mt-2 font-semibold text-slate-800">Color palette:</p>
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                            {analysis.colors.map((hex) => (
+                              <span key={hex} className="flex items-center gap-1">
+                                <span
+                                  className="h-3 w-3 rounded-full border border-slate-300"
+                                  style={{ backgroundColor: hex }}
+                                />
+                                {hex}
+                              </span>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </>
               ) : (
                 <>
                   <button
                     type="button"
                     onClick={() => uploadInputRef.current?.click()}
-                    className="flex h-40 w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-300 text-slate-400 transition hover:border-brand-400 hover:text-brand-500"
+                    className="flex min-h-40 w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-slate-400 transition hover:border-brand-400 hover:text-brand-500"
                   >
                     <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6">
                       <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                     </svg>
-                    <span className="text-xs font-medium">Click to upload an image</span>
+                    <div className="text-left text-xs font-medium leading-relaxed">
+                      <p className="mb-1 font-semibold">For best results, use:</p>
+                      {assetType === "key-visual" ? (
+                        <>
+                          <p>✓ High-resolution images with clear details</p>
+                          <p>✓ Consistent colors, shapes, and illustration style</p>
+                        </>
+                      ) : (
+                        <>
+                          <p>✓ A set of 3–10 icons in the same style</p>
+                          <p>✓ High-resolution images with clear details</p>
+                          <p>✓ Consistent colors, shapes, and illustration style</p>
+                        </>
+                      )}
+                    </div>
                   </button>
 
                   <div className="mt-2 flex items-center gap-2">

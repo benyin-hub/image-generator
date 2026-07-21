@@ -58,7 +58,6 @@ export default function AssetTypeSelector({
                 {ICONS[option.id]}
               </span>
               <span className="text-sm font-semibold text-slate-800">{option.label}</span>
-              <span className="text-xs leading-snug text-slate-500">{option.description}</span>
             </button>
           );
         })}

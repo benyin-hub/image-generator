@@ -3,7 +3,6 @@ export type AssetType = "app-icon" | "feature-icon" | "key-visual";
 export interface AssetTypeOption {
   id: AssetType;
   label: string;
-  description: string;
 }
 
 export interface StyleReferenceImage {
@@ -22,6 +21,12 @@ export interface Style {
   // per-asset-type libraries existed — those are treated as visible under
   // every asset type rather than orphaned.
   assetType?: AssetType;
+  // Dominant colour palette detected from the reference image (hex codes),
+  // enforced as a hard constraint whenever this style is applied.
+  colors?: string[];
+  // Short visual-characteristic tags detected from the reference image
+  // (e.g. "Rounded geometry"), shown on hover in the style library.
+  characteristics?: string[];
 }
 
 export interface GeneratedImage {

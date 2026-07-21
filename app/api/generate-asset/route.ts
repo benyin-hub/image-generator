@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateImages, InlineImage } from "@/lib/gemini";
-import { buildAssetPrompt } from "@/lib/promptTemplates";
+import { assetTypeComposition } from "@/lib/promptTemplates";
 import { AssetType } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -14,6 +14,8 @@ interface GenerateAssetBody {
     description: string;
     thumbnailBase64: string;
     thumbnailMimeType: string;
+    colors?: string[];
+    characteristics?: string[];
   } | null;
 }
 
@@ -32,32 +34,27 @@ export async function POST(req: NextRequest) {
 
     const count = Math.min(Math.max(Number(body.count) || 1, 1), 3);
 
-    let prompt = buildAssetPrompt(body.assetType, body.userPrompt);
+    let prompt = assetTypeComposition(body.assetType);
     const referenceImages: InlineImage[] = [];
 
     if (body.style) {
-      prompt += `\n\nApply this brand style ("${body.style.name}"): ${body.style.description}
+      const preserveLines = [
+        ...(body.style.characteristics ?? []),
+        ...(body.style.colors && body.style.colors.length > 0
+          ? [`Colour palette: ${body.style.colors.join(", ")}`]
+          : []),
+      ];
+      if (preserveLines.length === 0) {
+        preserveLines.push(body.style.description);
+      }
 
-Preserve:
-- line work
-- stroke thickness
-- corner radius
-- colour palette
-- illustration style
-- level of detail
-- padding
-- spacing
-- icon proportions
-- visual weight
-- simplicity
-- overall design language
+      prompt += `\n\nPreserve:\n${preserveLines.map((line) => `- ${line}`).join("\n")}
 
 Do NOT copy:
-- the subject
-- the composition
-- the silhouette
-- the pose
-- any background elements`;
+- the subject matter
+- exact objects
+- exact composition`;
+
       if (body.style.thumbnailBase64 && body.style.thumbnailMimeType) {
         referenceImages.push({
           mimeType: body.style.thumbnailMimeType,
@@ -65,6 +62,8 @@ Do NOT copy:
         });
       }
     }
+
+    prompt += `\n\n${body.userPrompt.trim()}`;
 
     console.log("=== Gemini prompt (generate-asset) ===\n" + prompt);
     const results = await generateImages(
