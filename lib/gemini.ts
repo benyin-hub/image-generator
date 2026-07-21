@@ -48,7 +48,7 @@ export async function generateImage(params: {
   const response = await ai.models.generateContent({
     model: MODEL,
     contents: [{ role: "user", parts }],
-    config: { imageConfig: { aspectRatio: "1:1" } },
+    config: { imageConfig: { aspectRatio: "1:1", imageSize: "2K" } },
   });
 
   const candidateParts = response.candidates?.[0]?.content?.parts ?? [];

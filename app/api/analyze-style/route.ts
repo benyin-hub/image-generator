@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(analysis);
   } catch (err) {
+    console.error("=== /api/analyze-style failed ===", err);
     const message = err instanceof Error ? err.message : "Failed to analyse style image.";
     return NextResponse.json({ error: message }, { status: 500 });
   }

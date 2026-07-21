@@ -16,25 +16,20 @@ export function assetTypeLabel(assetType: AssetType): string {
 // style isn't fighting a hardcoded "flat vector" assumption baked in here.
 const ASSET_TYPE_COMPOSITION: Record<AssetType, string> = {
   "app-icon": `App icon,
-rounded square format,
-subject centred and filling the frame,
-cohesive background treatment,
-recognisable as a launcher tile.
+full-bleed square format,
+the icon's background is white and fills the entire square canvas edge-to-edge, with no gaps or empty space in the corners.
 
 Quality:
 - centred composition
-- balanced negative space
-- clean silhouette
 - legible at small sizes
 - professional icon design
+- crisp, sharp edges
 
 Negative Prompt:
 - no text
 - no watermark
 - no border
-- no clutter
-- no multiple subjects
-- no drop shadows`,
+- no clutter`,
 
   "feature-icon": `UI feature icon,
 single centred glyph,

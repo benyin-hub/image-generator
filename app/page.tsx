@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import AssetTypeSelector from "@/components/AssetTypeSelector";
 import StyleLibrary from "@/components/StyleLibrary";
+import StylePaletteEditor from "@/components/StylePaletteEditor";
 import StyleModal from "@/components/StyleModal";
 import PromptInput from "@/components/PromptInput";
 import ImageCountSelector from "@/components/ImageCountSelector";
@@ -40,8 +41,18 @@ export default function Home() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [paletteOverride, setPaletteOverride] = useState<string[] | null>(null);
   const historyPanelRef = useRef<HTMLElement>(null);
   const generatedImagesRef = useRef<HTMLDivElement>(null);
+
+  const selectedStyle = styles.find((s) => s.id === selectedStyleId[assetType]) ?? null;
+
+  // Reset the one-time palette override whenever the effectively-selected
+  // style changes (switching styles or asset-type tabs), so it never leaks
+  // from one style/generation to the next.
+  useEffect(() => {
+    setPaletteOverride(null);
+  }, [selectedStyle?.id]);
 
   useEffect(() => {
     const loadedStyles = loadStyles();
@@ -108,8 +119,6 @@ export default function Home() {
     setActiveHistoryId(null);
     setImages([]);
 
-    const selectedStyle = styles.find((s) => s.id === selectedStyleId[assetType]) ?? null;
-
     try {
       const stylePayload = selectedStyle
         ? (() => {
@@ -119,7 +128,7 @@ export default function Home() {
               description: selectedStyle.description,
               thumbnailBase64: base64,
               thumbnailMimeType: mimeType,
-              colors: selectedStyle.colors,
+              colors: paletteOverride ?? selectedStyle.colors,
               characteristics: selectedStyle.characteristics,
             };
           })()
@@ -210,6 +219,14 @@ export default function Home() {
             onRename={handleRenameStyle}
             onAddStyle={() => setModalOpen(true)}
           />
+
+          {selectedStyle && (
+            <StylePaletteEditor
+              colors={paletteOverride ?? selectedStyle.colors ?? []}
+              defaultColors={selectedStyle.colors ?? []}
+              onChange={setPaletteOverride}
+            />
+          )}
 
           <PromptInput value={prompt} onChange={setPrompt} />
 

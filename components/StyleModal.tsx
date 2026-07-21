@@ -29,6 +29,41 @@ function fileToUploadedImage(file: File): Promise<UploadedImage> {
   });
 }
 
+// Gemini's vision input only accepts raster formats — SVGs (and anything
+// else outside this list) get rejected with "Unsupported MIME type" both
+// during style analysis and later, when the style's thumbnail is re-sent
+// as a reference image during asset generation. Rasterizing to PNG here,
+// once, up front, fixes both call sites at the source.
+const GEMINI_SUPPORTED_MIME_TYPES = ["image/png", "image/jpeg", "image/webp", "image/heic", "image/heif"];
+const UNSUPPORTED_FORMAT_MESSAGE = "Only these image formats are supported: PNG, JPEG, WebP, HEIC.";
+
+function rasterizeToPng(dataUrl: string): Promise<UploadedImage> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const size = 1024;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject(new Error(UNSUPPORTED_FORMAT_MESSAGE));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, size, size);
+      const pngDataUrl = canvas.toDataURL("image/png");
+      resolve({ dataUrl: pngDataUrl, base64: pngDataUrl.split(",")[1], mimeType: "image/png" });
+    };
+    img.onerror = () => reject(new Error(UNSUPPORTED_FORMAT_MESSAGE));
+    img.src = dataUrl;
+  });
+}
+
+function ensureSupportedImage(image: UploadedImage): Promise<UploadedImage> {
+  if (GEMINI_SUPPORTED_MIME_TYPES.includes(image.mimeType)) return Promise.resolve(image);
+  return rasterizeToPng(image.dataUrl);
+}
+
 export default function StyleModal({
   onClose,
   onSave,
@@ -43,14 +78,17 @@ export default function StyleModal({
   const [imageUrl, setImageUrl] = useState("");
   const [fetchingUrl, setFetchingUrl] = useState(false);
   const [urlError, setUrlError] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<StyleAnalysis | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
   const canAdd = name.trim().length > 0 && uploadedImage !== null;
 
   async function analyzeImage(image: UploadedImage) {
     setAnalysis(null);
+    setAnalysisError(null);
     setAnalyzing(true);
     try {
       const res = await fetch("/api/analyze-style", {
@@ -61,9 +99,12 @@ export default function StyleModal({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to analyse image.");
       setAnalysis(data);
-    } catch {
-      // Analysis is a non-blocking enhancement — saving the style still works without it.
+    } catch (err) {
+      // Non-blocking: saving the style still works without detected
+      // characteristics, but the failure should still be visible/retryable
+      // rather than silently disappearing.
       setAnalysis(null);
+      setAnalysisError(err instanceof Error ? err.message : "Failed to analyse image.");
     } finally {
       setAnalyzing(false);
     }
@@ -71,15 +112,21 @@ export default function StyleModal({
 
   async function handleUploadImageSelected(files: FileList | null) {
     if (!files || files.length === 0) return;
-    const converted = await fileToUploadedImage(files[0]);
-    setUploadedImage(converted);
-    analyzeImage(converted);
+    setUploadError(null);
+    try {
+      const converted = await ensureSupportedImage(await fileToUploadedImage(files[0]));
+      setUploadedImage(converted);
+      analyzeImage(converted);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Failed to process this image.");
+    }
   }
 
   async function handleUseImageUrl() {
     const url = imageUrl.trim();
     if (!url) return;
     setUrlError(null);
+    setUploadError(null);
     setFetchingUrl(true);
     try {
       const res = await fetch("/api/fetch-image", {
@@ -89,7 +136,11 @@ export default function StyleModal({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to fetch image.");
-      const converted = { dataUrl: data.dataUrl, base64: data.data, mimeType: data.mimeType };
+      const converted = await ensureSupportedImage({
+        dataUrl: data.dataUrl,
+        base64: data.data,
+        mimeType: data.mimeType,
+      });
       setUploadedImage(converted);
       setImageUrl("");
       analyzeImage(converted);
@@ -103,7 +154,9 @@ export default function StyleModal({
   function handleRemoveImage() {
     setUploadedImage(null);
     setAnalysis(null);
+    setAnalysisError(null);
     setAnalyzing(false);
+    setUploadError(null);
   }
 
   function handleAdd() {
@@ -190,6 +243,21 @@ export default function StyleModal({
                     )}
                   </div>
 
+                  {analysisError && !analyzing && (
+                    <p className="mx-auto mt-3 w-full max-w-xs text-xs text-red-600">
+                      Couldn&apos;t analyse this image ({analysisError}) — you can still save the
+                      style without detected characteristics, or{" "}
+                      <button
+                        type="button"
+                        onClick={() => analyzeImage(uploadedImage)}
+                        className="underline underline-offset-2 hover:text-red-700"
+                      >
+                        try again
+                      </button>
+                      .
+                    </p>
+                  )}
+
                   {analysis && !analyzing && (
                     <div className="mx-auto mt-3 w-full max-w-xs rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs leading-relaxed text-slate-600">
                       <p className="font-semibold text-slate-800">Visual characteristics:</p>
@@ -243,6 +311,7 @@ export default function StyleModal({
                       )}
                     </div>
                   </button>
+                  {uploadError && <p className="mt-1.5 text-xs text-red-600">{uploadError}</p>}
 
                   <div className="mt-2 flex items-center gap-2">
                     <div className="h-px flex-1 bg-slate-200" />
