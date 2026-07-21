@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateImages, InlineImage } from "@/lib/gemini";
-import { assetTypeComposition } from "@/lib/promptTemplates";
+import { assetTypeComposition, colorConstraintBlock } from "@/lib/promptTemplates";
 import { AssetType } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -38,17 +38,19 @@ export async function POST(req: NextRequest) {
     const referenceImages: InlineImage[] = [];
 
     if (body.style) {
-      const preserveLines = [
-        ...(body.style.characteristics ?? []),
-        ...(body.style.colors && body.style.colors.length > 0
-          ? [`Colour palette: ${body.style.colors.join(", ")}`]
-          : []),
-      ];
-      if (preserveLines.length === 0) {
-        preserveLines.push(body.style.description);
-      }
+      prompt += `\n\nStyle characteristics ("${body.style.name}"): ${body.style.description}${colorConstraintBlock(body.style.colors ?? [])}
 
-      prompt += `\n\nPreserve:\n${preserveLines.map((line) => `- ${line}`).join("\n")}
+Preserve:
+- line work
+- stroke thickness
+- corner radius
+- colour palette
+- visual weight
+- illustration style
+- level of detail
+- padding
+- spacing
+- overall design language
 
 Do NOT copy:
 - the subject matter

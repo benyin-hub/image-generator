@@ -73,6 +73,20 @@ export function assetTypeComposition(assetType: AssetType): string {
   return ASSET_TYPE_COMPOSITION[assetType];
 }
 
+export const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+export function colorConstraintBlock(colors: string[]): string {
+  const valid = colors.filter((c) => HEX_COLOR_RE.test(c)).slice(0, 3);
+  if (valid.length === 0) return "";
+  const list = valid.join(", ");
+  return `
+
+Colour Constraint:
+- Use ONLY this colour palette for every shape, line, and fill in this artwork: ${list}.
+- Do not introduce any other hue, gradient, or shading colour outside this palette.
+- Match the colour proportions of the reference image's palette — a colour used only for thin outlines should stay a thin outline, not expand into a large fill area.`;
+}
+
 const PROMPT_PLACEHOLDER =
   "Describe the Subject — what the main object or scene is; and the Composition — where it sits in the frame (centred, on top, underneath, beside or scattered).";
 
